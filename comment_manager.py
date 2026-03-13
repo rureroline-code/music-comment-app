@@ -1,6 +1,7 @@
 import json
 import os
 import tkinter as tk
+
 from setting import COMMENT_FOLDER, COMMENT_DISPLAY_RANGE
 
 
@@ -23,6 +24,9 @@ def add_comment(self):
     }
 
     self.comments.append(comment)
+
+    # 時間順ソート（重要）
+    self.comments.sort(key=lambda c: c["time"])
 
     self.save_comments()
 
@@ -59,7 +63,16 @@ def auto_load_comments(self):
         return
 
     with open(path, "r", encoding="utf-8") as f:
-        self.comments = json.load(f)
+        try:
+            self.comments = json.load(f)
+        except:
+            self.comments = []
+
+    # 時間順ソート
+    self.comments.sort(key=lambda c: c["time"])
+
+    self.refresh_comment_listbox()
+    self.update_pinned_display()
 
 
 def schedule_comments(self):
@@ -108,9 +121,11 @@ def show_comment(self, comment):
 
     text = f"[{self.format_comment_time(comment['time'])}] {comment['text']}"
 
+    y = 20 + len(self.active_comments) * 30
+
     item = self.canvas.create_text(
         10,
-        20 + len(self.active_comments) * 30,
+        y,
         anchor="nw",
         text=text,
         fill="white",
@@ -119,10 +134,25 @@ def show_comment(self, comment):
 
     self.active_comments.append(item)
 
-    self.root.after(
-        self.comment_display_time,
-        lambda i=item: self.remove_comment(i)
-    )
+    # 区間コメント対応
+    if "end_time" in comment:
+
+        duration = max(
+            1000,
+            int((comment["end_time"] - comment["time"]) * 1000)
+        )
+
+        self.root.after(
+            duration,
+            lambda i=item: self.remove_comment(i)
+        )
+
+    else:
+
+        self.root.after(
+            self.comment_display_time,
+            lambda i=item: self.remove_comment(i)
+        )
 
 
 def remove_comment(self, item):
@@ -143,6 +173,7 @@ def clear_comments_display(self):
 def format_comment_time(self, seconds):
 
     m = int(seconds) // 60
+
     s = int(seconds) % 60
 
     return f"{m:02}:{s:02}"
@@ -158,7 +189,15 @@ def refresh_comment_listbox(self):
 
         time = self.format_comment_time(c["time"])
 
-        text = f"{time} [{c['tag']}] {c['text']}"
+        if "end_time" in c:
+
+            end = self.format_comment_time(c["end_time"])
+
+            text = f"{time}-{end} [{c['tag']}] {c['text']}"
+
+        else:
+
+            text = f"{time} [{c['tag']}] {c['text']}"
 
         self.comment_listbox.insert("end", text)
 
@@ -175,11 +214,14 @@ def delete_selected_comment(self):
     comment = self.displayed_comments[index]
 
     if comment in self.comments:
+
         self.comments.remove(comment)
 
     self.save_comments()
 
     self.refresh_comment_listbox()
+
+    self.update_pinned_display()
 
 
 def pin_selected_comment(self):
@@ -228,11 +270,37 @@ def update_pinned_display(self):
         if not c.get("pinned"):
             continue
 
+        frame = tk.Frame(self.pinned_frame)
+
+        frame.pack(anchor="w", fill="x")
+
         text = f"{self.format_comment_time(c['time'])} {c['text']}"
 
-        label = tk.Label(self.pinned_frame, text=text)
+        label = tk.Label(frame, text=text)
+        label.pack(side="left")
 
-        label.pack(anchor="w")
+        # クリックジャンプ
+        label.bind(
+            "<Button-1>",
+            lambda e, t=c["time"]: self.seek_music(t)
+        )
+
+        btn = tk.Button(
+            frame,
+            text="×",
+            command=lambda com=c: self.unpin_comment_direct(com)
+        )
+
+        btn.pack(side="right")
+
+
+def unpin_comment_direct(self, comment):
+
+    comment["pinned"] = False
+
+    self.save_comments()
+
+    self.update_pinned_display()
 
 
 def set_section_start(self):
@@ -260,6 +328,8 @@ def set_section_end(self):
     }
 
     self.comments.append(comment)
+
+    self.comments.sort(key=lambda c: c["time"])
 
     self.section_start = None
 
