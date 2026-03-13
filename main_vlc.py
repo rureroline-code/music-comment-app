@@ -5,6 +5,8 @@ import vlc
 
 from setting import TAG_COLORS, TAG_OPTIONS, COMMENT_DISPLAY_TIME
 
+from comment_sync import CommentSyncEngine
+
 from comment_manager import (
     add_comment,
     schedule_comments,
@@ -54,7 +56,6 @@ class MusicCommentApp:
 
         self.comments = []
         self.displayed_comments = []
-
         self.active_comments = []
 
         self.comment_display_time = COMMENT_DISPLAY_TIME
@@ -81,12 +82,20 @@ class MusicCommentApp:
 
         from ui_builder import build_ui
         build_ui(self)
+
         # プレイリスト読み込み
         self.load_playlist()
 
         # シャッフル / リピート
         self.shuffle_enabled = False
         self.repeat_enabled = False
+
+        # コメント同期エンジン
+        self.comment_sync = CommentSyncEngine(
+            self.player,
+            self,
+            self.show_comment
+        )
 
         # 曲終了監視
         self.root.after(1000, self.check_song_end)
@@ -127,14 +136,20 @@ class MusicCommentApp:
 
         self.update_seek_bar()
 
+        # 同期エンジン開始
+        self.comment_sync.start()
+
     def pause_music(self):
 
         if self.is_playing:
 
             self.player.pause()
+
             self.is_playing = False
 
             self.pause_scheduled_comments()
+
+            self.comment_sync.stop()
 
     def stop_music(self):
 
@@ -145,7 +160,14 @@ class MusicCommentApp:
         self.seek_var.set(0)
 
         self.clear_scheduled_comments()
+
         self.clear_comments_display()
+
+        self.comment_sync.stop()
+
+    # ==================================
+    # 曲終了
+    # ==================================
 
     def check_song_end(self):
 
@@ -160,14 +182,15 @@ class MusicCommentApp:
                 index = random.randint(0, len(self.playlist) - 1)
 
                 self.playlist_listbox.selection_clear(0, "end")
+
                 self.playlist_listbox.selection_set(index)
 
                 path = self.playlist[index]
- 
+
                 self.load_music_from_playlist(path)
 
                 self.play_music()
- 
+
             else:
 
                 self.next_song()
@@ -175,27 +198,32 @@ class MusicCommentApp:
         self.root.after(1000, self.check_song_end)
 
     # ==================================
-    # シャッフルリピート
+    # シャッフル
     # ==================================
 
     def toggle_shuffle(self):
 
         self.shuffle_enabled = not self.shuffle_enabled
- 
-        if self.shuffle_enabled:
-            self.shuffle_button.config(text="🔀 シャッフル ON")
-        else:
-            self.shuffle_button.config(text="🔀 シャッフル OFF")
 
+        if self.shuffle_enabled:
+
+            self.shuffle_button.config(text=" シャッフル ON")
+
+        else:
+
+            self.shuffle_button.config(text=" シャッフル OFF")
 
     def toggle_repeat(self):
 
         self.repeat_enabled = not self.repeat_enabled
 
         if self.repeat_enabled:
-            self.repeat_button.config(text="🔁 リピート ON")
+
+            self.repeat_button.config(text=" リピート ON")
+
         else:
-            self.repeat_button.config(text="🔁 リピート OFF")
+
+            self.repeat_button.config(text=" リピート OFF")
 
     # ==================================
     # 音量
@@ -204,6 +232,7 @@ class MusicCommentApp:
     def change_volume(self, value):
 
         volume = int(float(value))
+
         self.player.audio_set_volume(volume)
 
     # ==================================
@@ -220,18 +249,24 @@ class MusicCommentApp:
         self.player.set_time(ms)
 
         self.clear_scheduled_comments()
+
         self.clear_comments_display()
 
         self.schedule_comments()
 
+        # 同期リセット
+        self.comment_sync.reset()
+
     def seek_forward_5(self):
 
         t = self.player.get_time() + 5000
+
         self.player.set_time(t)
 
     def seek_back_5(self):
 
         t = max(0, self.player.get_time() - 5000)
+
         self.player.set_time(t)
 
     # ==================================
@@ -248,6 +283,7 @@ class MusicCommentApp:
         self.seek_var.set(pos)
 
         current = self.format_time(pos)
+
         total = self.format_time(self.music_length)
 
         self.time_label.config(text=f"{current} / {total}")
@@ -261,12 +297,15 @@ class MusicCommentApp:
     # ==================================
 
     def set_loop_a(self):
+
         self.loop_a = self.player.get_time() / 1000
 
     def set_loop_b(self):
+
         self.loop_b = self.player.get_time() / 1000
 
     def toggle_ab_loop(self):
+
         self.loop_enabled = not self.loop_enabled
 
     def check_ab_loop(self):
@@ -280,6 +319,7 @@ class MusicCommentApp:
         pos = self.player.get_time() / 1000
 
         if pos >= self.loop_b:
+
             self.player.set_time(int(self.loop_a * 1000))
 
     # ==================================
@@ -315,6 +355,7 @@ class MusicCommentApp:
         seconds = int(seconds)
 
         m = seconds // 60
+
         s = seconds % 60
 
         return f"{m:02}:{s:02}"
