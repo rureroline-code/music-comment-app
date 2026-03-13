@@ -391,3 +391,5 @@ def attach_playlist_methods(app):
     app.add_to_playlist = add_to_playlist.__get__(app)
     app.remove_from_playlist = remove_from_playlist.__get__(app)
     app.play_selected_song = play_selected_song.__get__(app)
+    app.add_folder = add_folder.__get__(app)
+    app.save_playlist = save_playlist.__get__(app)
