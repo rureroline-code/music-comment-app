@@ -165,6 +165,7 @@ class MusicCommentApp:
 
         self.comment_sync.stop()
 
+        self.loop_enabled = False   # ←追加
     # ==================================
     # 曲終了
     # ==================================
@@ -191,12 +192,16 @@ class MusicCommentApp:
 
                 self.play_music()
 
+            elif self.repeat_enabled:   # ←追加
+
+                self.play_music()
+
             else:
 
                 self.next_song()
 
         self.root.after(1000, self.check_song_end)
-
+        
     # ==================================
     # シャッフル
     # ==================================
@@ -252,9 +257,9 @@ class MusicCommentApp:
 
         self.clear_comments_display()
 
-        self.schedule_comments()
+        if self.is_playing:        # ←追加
+            self.schedule_comments()
 
-        # 同期リセット
         self.comment_sync.reset()
 
     def seek_forward_5(self):
@@ -429,3 +434,4 @@ if __name__ == "__main__":
     app = MusicCommentApp(root)
 
     root.mainloop()
+
